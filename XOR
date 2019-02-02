@@ -1,0 +1,18 @@
+#!/usr/bin/python3
+i =  int(input())
+k = i-1
+result = [k]
+while i > 0:    
+    a,b=map(int,input().split())
+    XOR = a
+    while b > a:
+        XOR,a = XOR^(a+1),a+1
+    if(XOR%2 == 0):
+        result[i-1] = 'Even'
+    else:
+        result[i-1] = 'Odd'
+    i = i - 1
+    
+while k > 0:
+    print(result[k])
+    k = k - 1
