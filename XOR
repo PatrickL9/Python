@@ -1,17 +1,16 @@
 #!/usr/bin/python3
-i =  int(input())
-result = []
-while i > 0:    
+n = int(input())
+for i in range(n):    
     a,b=map(int,input().split())
-    XOR = a
-    while b > a:
-        XOR,a = XOR^(a+1),a+1
-    if(XOR%2 == 0):
-        result.append('Even')
+    if(a%2==0):
+        d = (b-a-1)%4
+        if(d>1):
+            print('Even')
+        else:
+            print('Odd')
     else:
-        result.append('Odd')
-    i = i - 1
-    
-    
-for m in range(len(result)):
-    print(result[m])
+        d = (b-a)%4
+        if(d>1):
+            print('Even')
+        else:
+            print('Odd')
