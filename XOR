@@ -1,16 +1,20 @@
 #!/usr/bin/python3
 n = int(input())
+result = []
 for i in range(n):    
     a,b=map(int,input().split())
     if(a%2==0):
         d = (b-a-1)%4
         if(d>1):
-            print('Even')
+            result.append('Even')
         else:
-            print('Odd')
+            result.append('Odd')
     else:
         d = (b-a)%4
         if(d>1):
-            print('Even')
+            result.append('Even')
         else:
-            print('Odd')
+            result.append('Odd')
+    
+for j in range(0,len(result)):
+    print(result[j])
