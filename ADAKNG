@@ -1,0 +1,32 @@
+#!/usr/bin/python3
+n = int(input())
+result = []
+
+for i in range(n):
+    r,c,k=map(int,input().split())
+    if r > 4:
+        r1 = 8-r+1
+    else: r1 = r
+    if c > 4:
+        c1 = 8-c+1
+    else: c1 = c
+    if k >= 7:
+        x,y = 8,8
+        
+    if k <7 and k >= 4:
+        if r1 + k >= 8:
+            x = 8
+        else:x = r1 + k
+        if c1 + k >= 8:
+            y = 8
+        else:y = c1 + k
+    if k < 4:
+        if r1 - k <= 0:
+            x = r1 + k
+        else:x = 1 + k*2
+        if c1 - k <= 0:
+            y = c1 + k
+        else:y = 1 + k*2
+    result.append(x*y) 
+for j in range(0,len(result)):
+    print(result[j])
