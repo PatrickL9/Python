@@ -1,0 +1,14 @@
+#!/usr/bin/python3
+import math
+i = int(input())
+
+for ii in range(i):
+    n,a,b,k=map(int,input().split())
+    lcm = a * b/math.gcd(a,b)
+    lcmm = n // lcm
+    x = n // a -lcmm
+    y = n// b - lcmm
+    if x + y >= k:
+        print('Win')
+    else:
+        print('Lose')
