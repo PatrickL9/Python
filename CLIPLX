@@ -1,0 +1,9 @@
+#!/usr/bin/python3
+t = int(input())
+for tt in range(t):
+    x,y = map(int,input().split())
+    if x <= y:
+        result = 0
+    else:
+        result = x-y
+    print(result)
