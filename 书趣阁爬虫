@@ -1,0 +1,28 @@
+```python
+import requests
+from lxml import etree
+
+url = 'http://www.shuquge.com/txt/5809/index.html'
+url_1 = 'http://www.shuquge.com/txt/5809/'
+header_1 = {
+    'User-Agent':'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36 SE 2.X MetaSr 1.0',
+    'Cookie':'bcolor=; font=; size=; fontcolor=; width=; Hm_lvt_3806e321b1f2fd3d61de33e5c1302fa5=1584516814; Hm_lpvt_3806e321b1f2fd3d61de33e5c1302fa5=1584518882'
+}
+
+resp = requests.get(url, headers=header_1, allow_redirects=False)
+text = resp.content.decode('utf-8')
+html = etree.HTML(text)
+ul = html.xpath('.//div[@class="listmain"]/dl/dd/a/@href')
+filename = 'yuanzun1.txt'
+with open(filename, 'a', encoding='utf-8') as f:
+    for li in ul:
+        href = url_1 + ''.join(li)
+        #print(href)
+        resp = requests.get(href, headers=header_1, allow_redirects=False)
+        text = resp.content.decode('utf-8')
+        html = etree.HTML(text)
+        title = html.xpath('.//div[@class="content"]/h1/text()')
+        content = html.xpath('.//div[@class="content"]/div[@id="content"]/text()')
+        content_1 = ''.join(content)
+        f.write(''.join(title))
+        f.write(content_1)
