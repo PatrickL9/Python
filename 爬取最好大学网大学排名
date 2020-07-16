@@ -1,0 +1,35 @@
+import requests
+from lxml import etree
+
+url_r = 'http://www.zuihaodaxue.cn/'
+url_1 = 'http://www.zuihaodaxue.cn/rankings.html'
+header = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.100 Safari/537.36'
+}
+
+resp_1 = requests.get(url_1,headers = header)
+# 读取txt中文有乱码，网页版为utf-8,所以要解码
+#resp_1.encoding = 'utf-8'
+text = resp_1.content.decode('utf-8')
+# print(text)
+html_1 = etree.HTML(text)
+# 读取各类大学排名的网址
+ul_1 = html_1.xpath('//div[@id="more"]/div/div/a/@href')
+for li in ul_1:
+    href = url_r + ''.join(li)
+    # print(href)
+    resp_2 = requests.get(href,headers = header)
+    text_2 = resp_2.content.decode('utf-8')
+    # print(text_2)
+    html_2 = etree.HTML(text_2)
+    title = html_2.xpath('//div[@class="news-wrap"]/h3/text()')
+    print(title)
+    # 获取每一类大学排名信息，注意这里取的都是列表，所以再用for循环叠加输出
+    ul = html_2.xpath('//tbody[@class="hidden_zhpm"]/tr[@class="alt"]')
+    rank = html_2.xpath('//tbody[@class="hidden_zhpm"]/tr[@class="alt"]/td[1]/text()')
+    rank_all = html_2.xpath('//tbody[@class="hidden_zhpm"]/tr[@class="alt"]/td[2]/text()')
+    us_name = html_2.xpath('//tbody[@class="hidden_zhpm"]/tr[@class="alt"]/td[3]/div/text()')
+    province = html_2.xpath('//tbody[@class="hidden_zhpm"]/tr[@class="alt"]/td[4]/text()')
+    point = html_2.xpath('//tbody[@class="hidden_zhpm"]/tr[@class="alt"]/td[5]/text()')
+    for i,j,k,l,m in zip(rank,rank_all,us_name,province,point):
+        print(i,j,k,l,m,sep=' ')
