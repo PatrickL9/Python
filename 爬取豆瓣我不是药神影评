@@ -1,0 +1,35 @@
+# !/usr/bin/python3
+import requests
+import time
+from lxml import etree
+
+header = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.100 Safari/537.36'
+    }
+# 取一页短评
+def get_onepage(url_r):
+    resp = requests.get(url_r,headers = header)
+    text = resp.content.decode('utf-8')
+    # print(text)
+    html = etree.HTML(text)
+    user = html.xpath('//div[@id="comments"]/div[@class="comment-item"]/div[@class="comment"]/h3/span[@class="comment-info"]/a/text()')
+    comment_time = html.xpath('//div[@id="comments"]/div[@class="comment-item"]/div[@class="comment"]/h3/span[@class="comment-info"]/span[@class="comment-time "]/text()')
+    content = html.xpath('//div[@id="comments"]/div[@class="comment-item"]/div[@class="comment"]/p/span/text()')
+    for u,ct,c in zip(user,comment_time,content):
+        print(u,ct.strip(),c,sep=' ')
+
+# 网址取下一页，循环获取短评
+def get_morepage(page,url):
+    get_onepage(url)
+    for i in range(page):
+        url_1 = url + 'start='+ str(20+10*(i-1)) + '&limit=20&sort=new_score&status=P&percent_type='
+        get_onepage(url_1)
+        print('第'+ str(i+1) + '页评论采集完毕')
+        time.sleep(1)
+
+def main():
+    url_r = 'https://movie.douban.com/subject/26752088/comments?'
+    get_morepage(10,url_r) #爬取10页影评
+
+if __name__ == '__main__':
+    main()
