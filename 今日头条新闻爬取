@@ -1,0 +1,63 @@
+# !/usr/bin/python3
+import requests
+import time
+from urllib.parse import urlencode
+import json
+
+header = {
+    'user-agent': 'Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.100 Safari/537.36',
+    'cookie': 'tt_webid=6851756096589383176; SLARDAR_WEB_ID=edc3c76c-44d4-4ab1-a043-064116c30e3f; s_v_web_id=verify_kcvbpo9a_cYt9yc22_Sart_4SyA_90ip_o1kuxy0YqAcT; ttcid=f995f9f0e4d54eefb75797068141645342; WEATHER_CITY=%E5%8C%97%E4%BA%AC; tt_webid=6851756096589383176; csrftoken=5634a48c3e42e7f6fef8bf63f702b43c; tt_scid=qbRFyaa9wIw2.1iPnphqqrvoXtN5fzXdn4FK5KWFiJKu7337g.MF3NZ6WXs2ul62e87e; __tasessionId=2md242r8d1595560759186'
+}
+def get_one_page(offset,keyword):
+    paras = {
+        #这些参数是看 network->XHR->headers->query string parameters
+        'aid': 24,
+        'app_name': 'web_search',
+        'offset': offset,  #翻页关键字
+        'format': json,
+        'keyword': keyword,#搜索关键字
+        'autoload': 'true',
+        'count': 20,
+        'en_qc': 1,
+        'cur_tab': 1,
+        'from': 'search_tab',
+        'pd': 'synthesis',
+        'timestamp': int(time.time()),#时间戳
+        '_signature': 'EE8MTAAgEBA6f2RXA3zxmhBOTVAAE9a6YhS.kERflSaS4mkhi0y-XXljGyblJlPm0Dtc3bKr3UIAZ-lqGldLkQjUzYVxl1ca6xRm4ZHpkBWgKtHcx6r5xOcnRkAsvo1TgMG'
+    }
+    #网址解析
+    url = 'https://www.toutiao.com/api/search/content/?' + urlencode(paras)
+    try:
+        response = requests.get(url,headers = header,timeout = 10)
+        if response.status_code == 200:
+            return response.text
+        else:
+            return None
+    except:
+        print('初始请求失败')
+        return None
+
+def get_more_page(offset,keyword):
+    html = get_one_page(offset*20,keyword)
+    # print(type(html))
+    # print(html)
+    data = json.loads(html) #传入的是jason格式，本质是string，loads了之后变成字典格式
+    get_data = data.get('data') #字典get函数提取关键字为data的数据，提取出来的还是字典
+    if get_data is not None:
+        for item in get_data:
+            title = item.get('title') #继续用字典get，提取title和内容
+            content = item.get('abstract')
+            if title is not None:
+                print('标题：'+ str(title))
+                print('简介：'+ str(content))
+                print('-------------------')
+
+def main():
+    page = 2 #爬取页数
+    keyword = '特朗普' #爬取关键字
+    for i in range(page):
+        get_more_page(i,keyword)
+        time.sleep(1)
+
+if __name__ == '__main__':
+    main()
