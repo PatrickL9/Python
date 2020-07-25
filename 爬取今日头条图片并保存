@@ -1,0 +1,75 @@
+#!/usr/bin/python3
+import requests
+import time
+from urllib.parse import urlencode
+from urllib.request import urlretrieve
+import json
+
+header = {
+    'user-agent': 'Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.100 Safari/537.36',
+    'cookie': 'tt_webid=6851756096589383176; SLARDAR_WEB_ID=edc3c76c-44d4-4ab1-a043-064116c30e3f; s_v_web_id=verify_kcvbpo9a_cYt9yc22_Sart_4SyA_90ip_o1kuxy0YqAcT; ttcid=f995f9f0e4d54eefb75797068141645342; WEATHER_CITY=%E5%8C%97%E4%BA%AC; tt_webid=6851756096589383176; csrftoken=5634a48c3e42e7f6fef8bf63f702b43c; tt_scid=qbRFyaa9wIw2.1iPnphqqrvoXtN5fzXdn4FK5KWFiJKu7337g.MF3NZ6WXs2ul62e87e; __tasessionId=2md242r8d1595560759186'
+}
+
+#读取一页jason数据
+def get_one_page(offset,keyword):
+    paras = {
+        #这些参数是看 network->XHR->headers->query string parameters
+        'aid': 24,
+        'app_name': 'web_search',
+        'offset': offset,  #翻页关键字
+        'format': json,
+        'keyword': keyword,#搜索关键字
+        'autoload': 'true',
+        'count': 20,
+        'en_qc': 1,
+        'cur_tab': 1,
+        'from': 'search_tab',
+        'pd': 'synthesis',
+        'timestamp': int(time.time()),#时间戳
+        '_signature': '4FholAAgEBDKaACPZF4SH-BZKYAAL9Ox7xXuGzgKWPE6rk1E.ICktm8nb-APfe-F.GOnBWqVt4pV9yu0m8zBHsj5BgY7Sr.wVfXLnTMGz8GDmBgt.A48u3kB5uMC8b0hlCZ'
+        }
+
+    url = 'https://www.toutiao.com/api/search/content/?' + urlencode(paras)
+    try:
+        response = requests.get(url,headers = header,timeout = 10)
+        if response.status_code == 200:
+            return response.text
+        else:
+            return None
+    except:
+        print('初始请求失败')
+        return None
+        
+#读取多页Jason数据
+def get_more_page(offset,keyword):
+
+    html = get_one_page(offset*20,keyword)
+    # print(type(html))
+    # print(html)
+    data = json.loads(html) #传入的是jason格式，本质是string，loads了之后变成字典格式
+    get_data = data.get('data') #get函数提取关键字为data，提取出来的还是字典
+    if get_data and 'data' in data.keys():  #遍历所有字典的关键字，包括子字典
+       for item in get_data:
+           title = item.get('title')
+           img_url = item.get('large_image_url')
+           # print(title)
+           # print(img_url)
+           save_img(title,img_url)
+           
+#保存图片链接至本地
+def save_img(title,img_url):
+    save_path = 'E:/Python/今日头条/'
+    if img_url is not None and len(str(img_url)) > 2: 
+        #空链接不保存，不然urlretrieve会报错，判断链接长度目的是排除链接为''
+        urlretrieve(str(img_url), save_path + title + '.jpg')
+
+def main():
+    page = 10 #爬取页数
+    keyword = '亚马逊' #爬取关键字
+    for i in range(page):
+        get_more_page(i,keyword)
+        print('已爬取第'+str(i+1)+'页')
+        time.sleep(1)
+    print('爬取结束！')
+if __name__ == '__main__':
+    main()
