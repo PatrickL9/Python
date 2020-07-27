@@ -1,0 +1,73 @@
+#!/usr/bin/python3
+import requests
+import time
+import xlwt
+from lxml import etree
+from fake_useragent import UserAgent
+
+ua = UserAgent()
+header = {
+        'User-Agent': ua.chrome
+    }
+
+#requess 请求,中文乱码，需decode解码
+def get_page(url):
+    try:
+        response = requests.get(url,headers = header,timeout = 10)
+        if response.status_code == 200:
+            return response.content.decode('utf-8')
+            # return response.text
+        else:
+            return None
+    except:
+        print('初始请求失败')
+        return None
+
+# 取一页短评
+def get_onepage(url_r,info_list):
+    text = get_page(url_r)
+    # text = resp.content.decode('utf-8')
+    # print(text)
+    html = etree.HTML(text)
+    user = html.xpath('//div[@id="comments"]/div[@class="comment-item"]/div[@class="comment"]/h3/span[@class="comment-info"]/a/text()')
+    comment_time = html.xpath('//div[@id="comments"]/div[@class="comment-item"]/div[@class="comment"]/h3/span[@class="comment-info"]/span[@class="comment-time "]/text()')
+    content = html.xpath('//div[@id="comments"]/div[@class="comment-item"]/div[@class="comment"]/p/span/text()')
+
+    for u,ct,c in zip(user,comment_time,content):
+        # print(u,ct.strip(),c,sep=' ')
+        info_list.append([u,ct.strip(),c])
+
+
+# 网址取下一页，循环获取短评
+def get_morepage(page,url,info_list):
+    get_onepage(url,info_list)
+    for i in range(page):
+        url_1 = url + 'start='+ str(20+10*(i-1)) + '&limit=20&sort=new_score&status=P&percent_type='
+        get_onepage(url_1,info_list)
+        print('第'+ str(i+1) + '页评论采集完毕')
+        time.sleep(1)
+
+
+def main():
+    page = 20 #爬取页数
+    url_r = 'https://movie.douban.com/subject/26752088/comments?'
+    info_list = []
+    get_morepage(page,url_r,info_list) #爬取10页影评
+    # print(len(info_list))
+    # for i in range(len(info_list)):
+    #     for j in range(3):
+    #         print(i+1,j,info_list[i][j])
+    workbook = xlwt.Workbook()
+    sheet1 = workbook.add_sheet('豆瓣短评', cell_overwrite_ok=True)
+    # workbook.save(r'E:\Python\豆瓣影评\豆瓣影评.xlsx')
+    row_0 = ['用户名', '评论时间', '短评内容']
+    for i in range(len(row_0)):
+        sheet1.write(0, i, row_0[i])
+    for i in range(len(info_list)):
+        for j in range(3):
+            sheet1.write(i + 1, j, info_list[i][j])
+    workbook.save(r'E:\Python\豆瓣影评\豆瓣影评.xlsx')
+    print('数据保存成功')
+
+if __name__ == '__main__':
+    main()
