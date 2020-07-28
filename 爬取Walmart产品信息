@@ -1,0 +1,95 @@
+#!/usr/bin/python3
+import requests
+import time
+import xlwt
+import json
+import re
+from lxml import etree
+from fake_useragent import UserAgent
+
+url_m = 'https://www.walmart.com'
+url1 = 'https://www.walmart.com/search/?query='
+url2 = '&amp;page='
+url3 = '&amp;cat_id=0&amp;grid=true&amp;ps=40'
+
+ua = UserAgent()
+header = {
+        'User-Agent': ua.chrome
+         }
+#geturl
+def get_page(url):
+    try:
+        response = requests.get(url,headers = header,timeout = 10,stream=True)
+        if response.status_code == 200:
+            return response.content.decode('utf-8')
+            # return response.text
+        else:
+            return None
+    except:
+        print('初始请求失败')
+        return None
+#爬取信息，沃尔玛listing列表明面是html，但实际只有10个，真正的listing列表是jason
+def parse_html(url,info_list):
+    text = get_page(url)
+    # print(text)
+    html = etree.HTML(text)
+    jasonfile = html.xpath('//script[@type="application/json" and @id="searchContent"]') #xpath读取出jason文件
+    # print(jasonfile[0].text)
+
+    data = json.loads(jasonfile[0].text) #加载Jason文件
+    # print(data)
+    get_data = data.get('searchContent').get('preso').get('items') #查找产品相关信息
+    # print(get_data)
+
+    for item in get_data:
+        title = item.get('title') #产品名称
+        title_new = re.sub(r'<.*?>','',title)
+        usItemId = item.get('usItemId') #产品编码SKU
+        offerPrice = item.get('primaryOffer').get('offerPrice') #产品价格
+        currencyCode = item.get('primaryOffer').get('currencyCode') #货币
+        minPrice = item.get('primaryOffer').get('minPrice')
+        maxPrice = item.get('primaryOffer').get('maxPrice')
+        customerRating = item.get('customerRating') #评分星级
+        numReviews = item.get('numReviews') #评论人数
+        productPageUrl = item.get('productPageUrl') #产品链接半成品
+        product_url = url_m + str(productPageUrl) #产品链接
+        department = item.get('department') #产品类别
+        specialOfferBadge = item.get('specialOfferBadge') #销售种类
+        brand = item.get('brand') #产品品牌
+        info_list.append([usItemId,brand,title_new,offerPrice,minPrice,maxPrice,currencyCode,customerRating,numReviews,product_url,department,specialOfferBadge])
+
+#保存数据到excel文件
+def save_data(info_list):
+    workbook = xlwt.Workbook()
+    sheet1 = workbook.add_sheet('爬取沃尔玛产品', cell_overwrite_ok=True)
+    # workbook.save(r'E:\Python\豆瓣影评\豆瓣影评.xlsx')
+    row_0 = ['产品编码', '品牌', '产品名称', '价格','最小价格','最大价格', '币种', '星级评分', '评分人数', 'listing链接', '产品分类', '产品标记']
+    for i in range(len(row_0)):
+        sheet1.write(0, i, row_0[i])
+    for i in range(len(info_list)):
+        for j in range(10):
+            sheet1.write(i + 1, j, info_list[i][j])
+    workbook.save(r'E:\Python\walmart\walmart爬虫.xlsx')
+    print('数据保存成功')
+
+#爬取多页
+def get_more_page(page,url,info_list):
+    parse_html(url, info_list)
+    for i in range(page):
+        parse_html(url+url2+str(page)+url3, info_list)
+        print('爬取第'+str(i+1)+'页成功')
+        time.sleep(1)
+
+
+def main():
+    keyword = 'Xiaomi' #搜索关键字
+    page = 3 #爬取页数，最多25页
+    info_list = []
+    get_more_page(page,url1+keyword,info_list)
+    save_data(info_list)
+    print('爬取结束')
+
+if __name__ == '__main__':
+    main()
+
+
