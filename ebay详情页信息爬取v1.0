@@ -1,0 +1,88 @@
+#!/usr/bin/python3
+import scrapy
+import requests
+import xlwt
+import re
+from lxml import etree
+from fake_useragent import UserAgent
+
+ua = UserAgent()
+header = {
+    'User-Agent': ua.Chrome,
+    'Accept-Language': 'zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2',
+    'Connection': 'keep-alive'
+    }
+keyword = 'phone'
+page = 1
+url = 'https://www.ebay.com/sch/i.html?_from=R40&_trksid=m570.l1313&_nkw='+ keyword+'&_sacat=0&_pgn='+str(page)
+def get_page(url):
+    # proxies = {'http': 'http://' + get_proxy()}
+    try:
+        response = requests.get(url,headers = header,timeout = 10)
+        if response.status_code == 200:
+            # return response.content.decode('utf-8')
+            return response.text
+        else:
+            return None
+    except:
+        print('初始请求失败')
+        return None
+
+
+text = get_page(url)
+html  = etree.HTML(text)
+results = html.xpath('//div/div/ul/li[contains(@class, "s-item" )]')
+
+workbook = xlwt.Workbook()
+sheet1 = workbook.add_sheet('ebayProduct', cell_overwrite_ok=True)
+row_0 = ['ebay产品编码', '品牌','产品名称','产品价格','产品链接','产品状态','库存情况','已售数量','店铺名称','店铺链接']
+for i in range(len(row_0)):
+    sheet1.write(0, i, row_0[i])
+row = 0
+for product in results:
+    row = row + 1
+    link = product.xpath('.//a[@class="s-item__link"]/@href')[0] #产品链接
+    # print(link)
+    text2 = get_page(link)
+    html2 = etree.HTML(text2)
+    product_id = html2.xpath('//div[@id="descItemNumber"]/text()')  #ebay产品ID
+    # print(''.join(product_id))
+    brand = html2.xpath('//div[@class="itemAttr"]//h2[@itemprop="brand"]/span/text()') #产品品牌
+    # print(''.join(brand))
+    product_title = html2.xpath('//span[@class="u-dspn"]/text()')[0]  #产品名称
+    # print(product_title)
+    condition = html2.xpath('//div[contains(@class,"u-flL condText")]/text()') #产品状态，是否新品或二手
+    # condition_r = re.sub('\[\'|\'\]','',str(condition))
+    # print(''.join(condition))
+    price = html2.xpath('//span[@itemprop="price"]/text()') #产品价格
+    # price_r = re.sub('\[\'|\'\]','',str(price))
+    # print(''.join(price))
+    qty = html2.xpath('//span[@id="qtySubTxt"]/span/text()') #库存数量
+    # print(''.join(qty).strip())
+    seller_name = html2.xpath('//span[@class="mbg-nw"]/text()')[0]  #店铺名称
+    # print(seller_name)
+    seller_link = html2.xpath('//div[@class="mbg vi-VR-margBtm3"]/a/@href')[0] #店铺链接
+    # print(seller_link)
+    sold = html2.xpath('//span[@class="soldwithfeedback"]/span/a/text()')
+    sold_r = re.findall('^\d+[,?\d+]+',''.join(sold))  #已售数量
+    # print(''.join(sold_r))
+    list = [''.join(product_id),''.join(brand),product_title,''.join(price),link,''.join(condition),''.join(qty).strip(),''.join(sold_r),seller_name,seller_link]
+    for j in range(len(list)):
+        sheet1.write(row,j,list[j])
+    print('写入第'+str(row)+'个产品')
+workbook.save(r'E:\PythonProject\ebay_crawl\ebayProduct.xlsx')
+print('数据保存成功！')
+
+
+
+# workbook = xlwt.Workbook()
+# sheet1 = workbook.add_sheet('ebayProduct', cell_overwrite_ok=True)
+# # workbook.save(r'E:\PythonProject\ebay_crawl\ebayProdcut.xlsx')
+# row_0 = ['产品名称', '产品链接']
+# for i in range(len(row_0)):
+#     sheet1.write(0, i, row_0[i])
+# for i in range(len(info_list)):
+#     for j in range(2):
+#         sheet1.write(i + 1, j, info_list[i][j])
+# workbook.save(r'E:\PythonProject\ebay_crawl\ebayProdcut.xlsx')
+# print('数据保存成功')
