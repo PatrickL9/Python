@@ -1,0 +1,311 @@
+#!/usr/bin/python3
+import requests
+import re
+import xlwt,xlrd
+import xlutils.copy
+import time
+import threading
+import sys
+from pathlib import Path
+from lxml import etree
+from fake_useragent import UserAgent
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
+from tkinter import*
+from tkinter import scrolledtext
+from tkinter.filedialog import askdirectory
+from tkinter import messagebox
+from multiprocessing import freeze_support
+
+ua = UserAgent()
+thread_state = False
+header = {
+    'User-Agent': ua.Chrome,
+    'Accept-Language': 'zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2',
+    'Connection': 'keep-alive'
+    }
+
+class MainWindow:
+    def __init__(self,frame):
+        self.frame = frame
+        # 4个label
+        self.frame.title('ebay爬虫 by Patrick')
+        self.con = threading.Condition()
+        #设置弹出窗口位置坐标，在屏幕中央
+        self.screen_width = self.frame.winfo_screenwidth()
+        self.screen_height = self.frame.winfo_screenheight()
+        self.window_width = 390
+        self.window_height = 300
+        self.x = (self.screen_width-self.window_width)/2
+        self.y = (self.screen_height-self.window_height)/4
+
+        # 顶层菜单
+        self.menubar = Menu(self.frame)
+        # self.menubar.add_command(label="Hello")
+        self.submenu = Menu(self.menubar,tearoff=False)
+        self.submenu.add_command(label='使用说明')
+        self.submenu.add_command(label="关于")
+        self.menubar.add_cascade(label='帮助',menu=self.submenu)
+        # 显示菜单
+        self.frame.config(menu=self.menubar)
+
+        #标签层
+        self.label_keyword =Label(self.frame, text="搜索关键词:")
+        self.label_page =Label(self.frame, text="爬取页数:")
+        self.label_filename =Label(self.frame, text="设置文件名:")
+        self.label_path=Label(self.frame,text="文件保存路径:")
+        # 设置3个按钮
+        self.button_ok = Button(self.frame, text="开始爬取", width=10, command=self.input_info)
+        self.button_cancel = Button(self.frame, text="清空输入", width=10, command=self.input_cancel)
+        self.button_path = Button(self.frame,text="选择路径",width=8,command=self.ask_path)
+        self.button_clear = Button(self.frame,text='清屏',width = 8,command=self.output_clear)
+        # 4个输入框
+        self.keyword_entry =Entry(self.frame,width =30)
+        self.page_entry =Entry(self.frame,width =30)
+        self.filename_entry =Entry(self.frame,width =30)
+        self.path_entry = Entry(self.frame,width =30)
+        # 用grid的方式设置4个label、4个输入框和3个按钮的位置
+        self.label_keyword.grid(row=0, column=0,sticky=E)
+        self.label_page.grid(row=1, column=0,sticky=E)
+        self.label_filename.grid(row=2, column=0,sticky=E)
+        self.label_path.grid(row=3,column=0,sticky=E)
+
+        self.keyword_entry.grid(row=0, column=1,columnspan=2,sticky=W)
+        self.page_entry.grid(row=1, column=1,columnspan=2,sticky=W)
+        self.filename_entry.grid(row=2, column=1,columnspan=2,sticky=W)
+        self.path_entry.grid(row=3, column=1)
+
+        self.button_ok.grid(row=4, column=0)
+        self.button_cancel.grid(row=4, column=1)
+        self.button_path.grid(row=3,column=2)
+        self.button_clear.grid(row=4,column=2)
+
+        self.output = scrolledtext.ScrolledText(self.frame,height='10',width=50,relief='solid')
+        self.output.grid(row = 5,column=0,columnspan=3)
+
+        #每个组件增加5个单位的宽距，美化用，但注意菜单栏不可以增加
+        for child in self.frame.winfo_children():
+            if child != self.menubar:
+                child.grid_configure(padx=5, pady=2)
+        #设置初始光标位置
+        self.keyword_entry.focus()
+        #设置界面在屏幕的初始位置
+        self.frame.geometry('%dx%d+%d+%d'%(self.window_width,self.window_height,self.x,self.y))
+
+        # self.frame.mainloop()
+        # thread_run(self.frame.mainloop())
+
+    #提交信息，开始爬取
+    def input_info(self):
+        keyword = self.keyword_entry.get()
+        page = self.page_entry.get()
+        filename = self.filename_entry.get()
+        s_path = self.path_entry.get()
+        if self.input_check():
+            self.output.insert('insert', '正在爬取中，请稍等\n')
+            # 爬虫开始，开一个线程执行，防止界面卡死
+            con = threading.Condition()
+            self.thread_run(crawl_start,keyword, int(page),filename, get_savepath(filename, s_path))
+            self.output.insert('end', '爬取结束！文件保存在:\n' + s_path + '\n')
+            self.keyword_entry.delete(0, END)
+            self.page_entry.delete(0, END)
+            self.filename_entry.delete(0, END)
+            self.path_entry.delete(0, END)
+            self.keyword_entry.focus()
+            self.output.see(END)
+            self.output.see(END)
+    #清空输入栏
+    def input_cancel(self):
+        self.keyword_entry.delete(0,END)
+        self.page_entry.delete(0,END)
+        self.filename_entry.delete(0,END)
+        self.path_entry.delete(0, END)
+        self.keyword_entry.focus()
+    #清空输出栏
+    def output_clear(self):
+        self.output.delete('1.0', END)
+    #输入文件路径
+    def ask_path(self):
+        save_path = askdirectory()
+        self.path_entry.delete(0, END)
+        self.path_entry.insert('insert',save_path)
+
+    #输入信息校验
+    def input_check(self):
+        keyword = self.keyword_entry.get()
+        page = self.page_entry.get()
+        filename = self.filename_entry.get()
+        s_path = self.path_entry.get()
+        if len(keyword) < 1:
+            messagebox.showinfo(title='提示',message='请输入搜索关键字')
+            self.keyword_entry.focus()
+        elif len(keyword) < 3:
+            messagebox.showinfo(title='提示', message='关键字请至少输入3个字符')
+            self.keyword_entry.delete(0, END)
+            self.keyword_entry.focus()
+        elif page == '':
+            messagebox.showinfo(title='提示', message='请输入爬取页数')
+            self.page_entry.focus()
+        elif page.isdigit() is False or int(page) == 0:
+            messagebox.showinfo(title='提示', message='爬取页数输入非法，请输入自然数')
+            self.page_entry.delete(0, END)
+            self.page_entry.focus()
+        elif int(page) > 999:
+            messagebox.showinfo(title='提示', message='爬取页数过大，建议减少')
+            self.page_entry.delete(0, END)
+            self.page_entry.focus()
+        elif len(filename) < 1:
+            messagebox.showinfo(title='提示', message='请输入文件名')
+            self.filename_entry.focus()
+        elif len(s_path) < 1:
+            messagebox.showinfo(title='提示', message='请选择文件保存路径')
+            self.path_entry.focus()
+        elif Path(s_path).exists() == False:
+            messagebox.showinfo(title='提示', message='文件路径不正确，请重新输入')
+            self.path_entry.focus()
+        else:
+            return True
+
+    def thread_run(self,func,*args):
+        self.con.acquire()
+        t =threading.Thread(target=func,args=args)
+        t.setDaemon(True)
+        t.start()
+        self.con.release()
+
+
+
+
+#加载网址
+def get_page(url):
+    # proxies = {'http': 'http://' + get_proxy()}
+    try:
+        response = requests.get(url,headers = header,timeout = 10)
+        if response.status_code == 200:
+            # return response.content.decode('utf-8')
+            return response.text
+        else:
+            return None
+    except:
+        print('初始请求失败')
+        return None
+
+#获取产品链接
+def get_product_link(url,link_list):
+    text = get_page(url)
+    html  = etree.HTML(text)
+    links = html.xpath('//div/div/ul/li[contains(@class, "s-item" )]//a[@class="s-item__link"]/@href')
+    for link in links:
+        link_list.append(link)
+
+#获取产品信息
+def get_product_info(link,save_path):
+    text = get_page(link)
+    html = etree.HTML(text)
+    product_id = html.xpath('//div[@id="descItemNumber"]/text()')  # ebay产品ID
+    # print(''.join(product_id))
+    brand = html.xpath('//div[@class="itemAttr"]//h2[@itemprop="brand"]/span/text()') #产品品牌
+    # print(''.join(brand))
+    product_title = html.xpath('//span[@class="u-dspn"]/text()')[0]  #产品名称
+    # print(product_title)
+    condition = html.xpath('//div[contains(@class,"u-flL condText")]/text()') #产品状态，是否新品或二手
+    # condition_r = re.sub('\[\'|\'\]','',str(condition))
+    # print(''.join(condition))
+    price = html.xpath('//span[@itemprop="price"]/text()') #产品价格
+    # price_r = re.sub('\[\'|\'\]','',str(price))
+    # print(''.join(price))
+    qty = html.xpath('//span[@id="qtySubTxt"]/span/text()') #库存数量
+    # print(''.join(qty).strip())
+    seller_name = html.xpath('//span[@class="mbg-nw"]/text()')[0]  #店铺名称
+    # print(seller_name)
+    seller_link = html.xpath('//div[@class="mbg vi-VR-margBtm3"]/a/@href')[0] #店铺链接
+    # print(seller_link)
+    sold = html.xpath('//span[@class="soldwithfeedback"]/span/a/text()')
+    sold_r = re.findall('^\d+[,?\d+]+',''.join(sold))  #已售数量
+    # print(''.join(sold_r))
+    product_info = [''.join(product_id),''.join(brand),product_title,''.join(price),link,''.join(condition),''.join(qty).strip(),''.join(sold_r),seller_name,seller_link]
+    save_product_info(product_info,save_path)
+    # print('保存第'+str(i+1)+'个产品信息')
+
+#保存产品信息至excel文件
+def save_product_info(product_info,save_path):
+    workbook = xlrd.open_workbook(save_path, formatting_info=True)
+    sheet = workbook.sheet_by_index(0)
+    nrows = sheet.nrows  # 获取当前excel文件所有行数
+    new_workbook = xlutils.copy.copy(workbook)  # 将xlrd对象拷贝转化为xlwt对象
+
+    # 保留excel格式
+    styleS = xlwt.XFStyle()
+    alignment = xlwt.Alignment()
+    alignment.horz = xlwt.Alignment.HORZ_CENTER
+    alignment.vert = xlwt.Alignment.VERT_CENTER
+    styleS.alignment = alignment
+
+    new_worksheet = new_workbook.get_sheet(0)  # 获取转化后工作簿中的第一个表格
+    for j in range(len(product_info)):
+        new_worksheet.write(nrows,j,product_info[j])
+    new_workbook.save(save_path)
+
+# 新建文件并写入表头
+def file_prepare(filename,save_path):
+    workbook = xlwt.Workbook()
+    style = xlwt.easyxf('font: bold on')  # 设置标题加粗
+    sheet1 = workbook.add_sheet( filename, cell_overwrite_ok=True)
+    sheet1.col(0).width = 256 * 13  # Set the column width
+    sheet1.col(2).width = 256 * 50  # Set the column width
+    sheet1.col(3).width = 256 * 15
+    sheet1.col(4).width = 256 * 20
+    sheet1.col(5).width = 256 * 20
+    sheet1.col(6).width = 256 * 10
+    sheet1.col(7).width = 256 * 13
+    sheet1.col(8).width = 256 * 15
+    sheet1.col(9).width = 256 * 50
+    row_0 = ['ebay产品编码', '品牌', '产品名称', '产品价格', '产品链接', '产品状态', '库存情况', '已售数量', '店铺名称', '店铺链接']
+    for i in range(len(row_0)):
+        sheet1.write(0, i, row_0[i], style)
+    workbook.save(save_path)
+
+def crawl_start(keyword,page,filename,save_path):
+    file_prepare(filename, save_path) #新建excel文件
+    link_list = []
+    count = 0
+    for i in range(page):
+        url = 'https://www.ebay.com/sch/i.html?_from=R40&_trksid=m570.l1313&_nkw=' + keyword + '&_sacat=0&_pgn=' + str(page)
+        get_product_link(url, link_list)  # 爬取所有产品链接
+        print('爬取第' + str(i + 1) + '页产品链接')
+    print('正在保存产品信息，请稍等')
+    for link in link_list:
+        get_product_info(link,save_path)
+        count = count +1
+        print('保存第'+str(count)+'个产品')
+    # with ProcessPoolExecutor(max_workers=5) as exector:
+    #     for link in link_list:
+    #         exector.submit(get_product_info,link,save_path)#读取每个产品链接的信息并写入excel
+    print('爬取结束！')
+
+def get_savepath(filename,save_path):
+    save_path_a = re.sub(r'/', '\\\\', save_path) + '\\' + filename + '.xlsx'
+    return save_path_a
+
+def output_test():
+    print('output from crawl.py')
+
+def main():
+    # keyword = 'phone' #查询关键字
+    # page = 3 #爬取页数
+    # filename = 'ebayProduct5'
+    # # save_path_a = """E:\PythonProject\ebay_crawl\ebayProduct.xlsx"""
+    # save_path = 'E:/PythonProject/ebay_crawl'
+    # start_time = time.time()
+
+    freeze_support()
+    root = Tk()
+    ebay_crawl = MainWindow(root)
+    root.mainloop()
+    # file_prepare(filename,get_savepath(filename,save_path))
+    # crawl_start(keyword,page,get_savepath(filename,save_path))
+    # end_time = time.time()
+    # print('用时：'+str(end_time-start_time)+'秒')
+
+
+if __name__ == '__main__':
+    main()
