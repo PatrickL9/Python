@@ -29,7 +29,6 @@ class MainWindow:
         self.frame = frame
         # 4个label
         self.frame.title('ebay爬虫 by Patrick')
-        self.con = threading.Condition()
         #设置弹出窗口位置坐标，在屏幕中央
         self.screen_width = self.frame.winfo_screenwidth()
         self.screen_height = self.frame.winfo_screenheight()
@@ -166,11 +165,10 @@ class MainWindow:
             return True
 
     def thread_run(self,func,*args):
-        self.con.acquire()
         t =threading.Thread(target=func,args=args)
         t.setDaemon(True)
         t.start()
-        self.con.release()
+
 
 
 
