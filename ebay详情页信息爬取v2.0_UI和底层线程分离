@@ -1,10 +1,12 @@
 #!/usr/bin/python3
+import webbrowser
 import requests
 import re
 import xlwt,xlrd
 import xlutils.copy
 import time
 import threading
+import os
 import sys
 from pathlib import Path
 from lxml import etree
@@ -16,8 +18,10 @@ from tkinter.filedialog import askdirectory
 from tkinter import messagebox
 from multiprocessing import freeze_support
 
+link_num = 0
+buyitnow_tag = False
 ua = UserAgent()
-thread_state = False
+# thread_state = False
 header = {
     'User-Agent': ua.Chrome,
     'Accept-Language': 'zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2',
@@ -29,6 +33,10 @@ class MainWindow:
         self.frame = frame
         # 4个label
         self.frame.title('ebay爬虫 by Patrick')
+        self.thread_state = True
+        self.con = threading.Condition()
+        self.time_start = time.time()
+        self.time_end = time.time()
         #设置弹出窗口位置坐标，在屏幕中央
         self.screen_width = self.frame.winfo_screenwidth()
         self.screen_height = self.frame.winfo_screenheight()
@@ -41,8 +49,8 @@ class MainWindow:
         self.menubar = Menu(self.frame)
         # self.menubar.add_command(label="Hello")
         self.submenu = Menu(self.menubar,tearoff=False)
-        self.submenu.add_command(label='使用说明')
-        self.submenu.add_command(label="关于")
+        self.submenu.add_command(label='使用说明',command=self.helpfile)
+        self.submenu.add_command(label="关于",command=self.authorinfo)
         self.menubar.add_cascade(label='帮助',menu=self.submenu)
         # 显示菜单
         self.frame.config(menu=self.menubar)
@@ -78,8 +86,9 @@ class MainWindow:
         self.button_path.grid(row=3,column=2)
         self.button_clear.grid(row=4,column=2)
 
-        self.output = scrolledtext.ScrolledText(self.frame,height='10',width=50,relief='solid')
+        self.output = scrolledtext.ScrolledText(self.frame,height='10',width=50,relief='solid',)
         self.output.grid(row = 5,column=0,columnspan=3)
+        self.output.config(state=DISABLED)
 
         #每个组件增加5个单位的宽距，美化用，但注意菜单栏不可以增加
         for child in self.frame.winfo_children():
@@ -101,17 +110,17 @@ class MainWindow:
         s_path = self.path_entry.get()
         if self.input_check():
             self.output.insert('insert', '正在爬取中，请稍等\n')
+            self.time_start = time.time()
             # 爬虫开始，开一个线程执行，防止界面卡死
             con = threading.Condition()
-            self.thread_run(crawl_start,keyword, int(page),filename, get_savepath(filename, s_path))
-            self.output.insert('end', '爬取结束！文件保存在:\n' + s_path + '\n')
-            self.keyword_entry.delete(0, END)
-            self.page_entry.delete(0, END)
-            self.filename_entry.delete(0, END)
-            self.path_entry.delete(0, END)
-            self.keyword_entry.focus()
-            self.output.see(END)
-            self.output.see(END)
+            t1 = threading.Thread(target=self.thread_start,args=[keyword, page,filename, s_path])
+            t2 = threading.Thread(target=self.thread_end)
+            t3 = threading.Thread(target=self.thred_running)
+            # 线程开始，开始后t3线程无限循环等待，t1结束唤醒t2，同时结束t3
+            t1.start()
+            t3.start()
+            t2.start()
+
     #清空输入栏
     def input_cancel(self):
         self.keyword_entry.delete(0,END)
@@ -121,7 +130,9 @@ class MainWindow:
         self.keyword_entry.focus()
     #清空输出栏
     def output_clear(self):
+        self.output.config(state=NORMAL)
         self.output.delete('1.0', END)
+        self.output.config(state=DISABLED)
     #输入文件路径
     def ask_path(self):
         save_path = askdirectory()
@@ -163,15 +174,62 @@ class MainWindow:
             self.path_entry.focus()
         else:
             return True
+    # 爬虫线程
+    def thread_start(self,keyword, page,filename, s_path):
+        self.con.acquire()
+        # self.con.wait()
+        self.thread_state = True
+        crawl_start(keyword, int(page),filename,get_savepath(filename, s_path))
+        self.thread_state = False
+        self.con.notify()
+        self.con.release()
+    # 运行线程
+    def thred_running(self):
+        self.output.config(state=NORMAL)
+        while self.thread_state is True:
+            self.output.delete(1.0, END)
+            self.output.insert('insert', '正在爬取，请稍等.')
+            time.sleep(1)
+            self.output.delete(1.0, END)
+            self.output.insert('insert', '正在爬取，请稍等..')
+            time.sleep(1)
+            self.output.delete(1.0, END)
+            self.output.insert('insert', '正在爬取，请稍等...')
+            time.sleep(1)
+            self.output.delete(1.0, END)
+            self.output.insert('insert', '正在爬取，请稍等....')
+            time.sleep(1)
+        self.output.config(state=DISABLED)
+    # 结束信息线程
+    def thread_end(self):
+        self.con.acquire()
+        # self.con.wait()
+        s_path = self.path_entry.get()
 
-    def thread_run(self,func,*args):
-        t =threading.Thread(target=func,args=args)
-        t.setDaemon(True)
-        t.start()
-
-
-
-
+        self.con.notify()
+        self.con.release()
+        self.time_end = time.time()
+        time_cost = self.time_end - self.time_start
+        time.sleep(4)
+        self.thread_state = False
+        self.keyword_entry.delete(0, END)
+        self.page_entry.delete(0, END)
+        self.filename_entry.delete(0, END)
+        self.path_entry.delete(0, END)
+        self.keyword_entry.focus()
+        self.output.see(END)
+        self.output.config(state=NORMAL)
+        self.output.insert('end', '\n爬取结束！文件保存在:\n' + s_path + '\n'+'本次爬取共用 '+ str(round(time_cost,0)) +' 秒'+'\n')
+        self.output.config(state=DISABLED)
+    # 帮助文档
+    def helpfile(self):
+        # webbrowser.open('help.html')
+        # os.startfile(r'help.docx')
+        # os.system(r'help.docx')
+        print('哈哈，帮助文件还没做好呢')
+    # 版权信息
+    def authorinfo(self):
+        messagebox.showinfo(title='关于', message='eBay爬虫Demo v1.0\n有修改需求或建议请联系：林柏祥')
 
 #加载网址
 def get_page(url):
@@ -192,6 +250,7 @@ def get_product_link(url,link_list):
     text = get_page(url)
     html  = etree.HTML(text)
     links = html.xpath('//div/div/ul/li[contains(@class, "s-item" )]//a[@class="s-item__link"]/@href')
+    # img_rul = html.xpath('//div[@class]')
     for link in links:
         link_list.append(link)
 
@@ -219,8 +278,24 @@ def get_product_info(link,save_path):
     # print(seller_link)
     sold = html.xpath('//span[@class="soldwithfeedback"]/span/a/text()')
     sold_r = re.findall('^\d+[,?\d+]+',''.join(sold))  #已售数量
+    pv = html.xpath('//div[@class="vi-notify-new-bg-dBtm"]/span/text()')
     # print(''.join(sold_r))
-    product_info = [''.join(product_id),''.join(brand),product_title,''.join(price),link,''.join(condition),''.join(qty).strip(),''.join(sold_r),seller_name,seller_link]
+    catalogue = html.xpath('//ul[@role="list"]//text()')
+    catalogue_route = ''
+    for cat in catalogue:
+        str1 = re.match('^\s', cat)
+        if str1 is None:
+            catalogue_route = catalogue_route + str(cat)
+    # print(catalogue_route)
+    item_location = html.xpath('//div[@id="itemLocation"]//span/text()')
+    # print(item_location)
+    ship_to = ''
+    ships_to = html.xpath('//div[@id="shipsToSummary"]//span/text()')
+    for ship_to in ships_to:
+        ship_to = ship_to + re.sub(r"^(\s+)|(\s+)$", "", ''.join(ships_to))
+    ship_to1 = re.sub('\|', '', ship_to)
+    destination = re.sub(r"^(\s+)|(\s+)$", "", ship_to1)
+    product_info = [''.join(product_id),''.join(brand),catalogue_route,product_title,''.join(price),link,pv,''.join(condition),''.join(qty).strip(),''.join(sold_r),seller_name,seller_link,item_location,destination]
     save_product_info(product_info,save_path)
     # print('保存第'+str(i+1)+'个产品信息')
 
@@ -249,43 +324,53 @@ def file_prepare(filename,save_path):
     style = xlwt.easyxf('font: bold on')  # 设置标题加粗
     sheet1 = workbook.add_sheet( filename, cell_overwrite_ok=True)
     sheet1.col(0).width = 256 * 13  # Set the column width
-    sheet1.col(2).width = 256 * 50  # Set the column width
-    sheet1.col(3).width = 256 * 15
-    sheet1.col(4).width = 256 * 20
+    sheet1.col(2).width = 256 * 30
+    sheet1.col(3).width = 256 * 50  # Set the column width
+    sheet1.col(4).width = 256 * 15
     sheet1.col(5).width = 256 * 20
-    sheet1.col(6).width = 256 * 10
-    sheet1.col(7).width = 256 * 13
-    sheet1.col(8).width = 256 * 15
-    sheet1.col(9).width = 256 * 50
-    row_0 = ['ebay产品编码', '品牌', '产品名称', '产品价格', '产品链接', '产品状态', '库存情况', '已售数量', '店铺名称', '店铺链接']
+    sheet1.col(6).width = 256 * 13
+    sheet1.col(7).width = 256 * 20
+    sheet1.col(8).width = 256 * 10
+    sheet1.col(9).width = 256 * 13
+    sheet1.col(10).width = 256 * 15
+    sheet1.col(11).width = 256 * 50
+    row_0 = ['ebay产品编码', '品牌','产品类目', '产品名称', '产品价格', '产品链接','viewed per hour', '产品状态', '库存情况', '已售数量', '店铺名称', '店铺链接','item location','Ships to']
     for i in range(len(row_0)):
         sheet1.write(0, i, row_0[i], style)
     workbook.save(save_path)
 
 def crawl_start(keyword,page,filename,save_path):
+    print('我开始运行啦1')
     file_prepare(filename, save_path) #新建excel文件
     link_list = []
     count = 0
     for i in range(page):
-        url = 'https://www.ebay.com/sch/i.html?_from=R40&_trksid=m570.l1313&_nkw=' + keyword + '&_sacat=0&_pgn=' + str(page)
+        if buyitnow_tag is True:
+            url = 'https://www.ebay.com/sch/i.html?_from=R40&_trksid=m570.l1313&_nkw=' + keyword + '&_sacat=0&rt=nc&LH_BIN=1&_pgn=' + str(
+                i+1)
+            print(url)
+        else:
+            url = 'https://www.ebay.com/sch/i.html?_from=R40&_trksid=m570.l1313&_nkw=' + keyword + '&_sacat=0&_pgn=' + str(i+1)
+            print(url)
         get_product_link(url, link_list)  # 爬取所有产品链接
         print('爬取第' + str(i + 1) + '页产品链接')
+
     print('正在保存产品信息，请稍等')
-    for link in link_list:
-        get_product_info(link,save_path)
-        count = count +1
-        print('保存第'+str(count)+'个产品')
-    # with ProcessPoolExecutor(max_workers=5) as exector:
-    #     for link in link_list:
-    #         exector.submit(get_product_info,link,save_path)#读取每个产品链接的信息并写入excel
+    print('一个有'+str(len(link_list))+'个链接')
+    # for link in link_list:
+    #     get_product_info(link,save_path)
+    #     count = count +1
+    #     print('保存第'+str(count)+'个产品')
+    # 采用进程池，爬取信息会变成乱序，但速度有提升
+    lock = threading.Lock()
+    with ProcessPoolExecutor(max_workers=5) as exector:
+        for link in link_list:
+            exector.submit(get_product_info,link,save_path)#读取每个产品链接的信息并写入excel
     print('爬取结束！')
 
 def get_savepath(filename,save_path):
-    save_path_a = re.sub(r'/', '\\\\', save_path) + '\\' + filename + '.xlsx'
+    save_path_a = re.sub(r'/', '\\\\', save_path) + '\\' + filename + '.csv'
     return save_path_a
-
-def output_test():
-    print('output from crawl.py')
 
 def main():
     # keyword = 'phone' #查询关键字
@@ -294,16 +379,16 @@ def main():
     # # save_path_a = """E:\PythonProject\ebay_crawl\ebayProduct.xlsx"""
     # save_path = 'E:/PythonProject/ebay_crawl'
     # start_time = time.time()
-
+    # freeze是防止进程开启后产生多个窗口
     freeze_support()
     root = Tk()
     ebay_crawl = MainWindow(root)
+    # root.iconbitmap('patrick.ico')
     root.mainloop()
     # file_prepare(filename,get_savepath(filename,save_path))
     # crawl_start(keyword,page,get_savepath(filename,save_path))
     # end_time = time.time()
     # print('用时：'+str(end_time-start_time)+'秒')
-
 
 if __name__ == '__main__':
     main()
