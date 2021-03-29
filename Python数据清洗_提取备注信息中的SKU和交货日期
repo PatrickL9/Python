@@ -1,0 +1,127 @@
+# !/usr/bin/python3
+import pandas as pd
+import numpy as np
+import re
+import xlwt
+from warnings import simplefilter
+
+
+simplefilter(action='ignore', category=FutureWarning)  # 忽略读取xlsx警告信息
+# pd.set_option('display.width', 1000)  # 设置字符显示宽度
+# pd.set_option('display.max_rows', None)  # 设置显示最大行
+
+file_path = 'D:/数据处理/2021年/3月/0324采购订单交货日期处理/purchase_data_0324.xlsx'
+data = pd.read_excel(file_path)
+target_data = data.loc[:, ['系统SKU', '数量', '采购备注']]
+# print(type(temp_data))
+# print(target_data.loc[:10, :])
+
+result_list = []
+for index, row in data.iterrows():
+    # print(row['系统SKU'], row['数量'], row['采购备注'])
+    temp_str = str(row['采购备注'])
+    temp_sku = str(row['系统SKU'])
+    temp_qty = str(row['数量'])
+    print(temp_str)
+    if len(re.findall('[.]', temp_str)) > 0:
+        # print('有句点')
+        if len(re.findall('[,]', temp_str)) > 0:
+            # print('有逗号，分多个产品')
+            if len(re.findall('[+]', temp_str)) > 0:
+                print('有逗号又有加号的情况')
+                temp_list1 = temp_str.split(',')
+                for item_step1 in temp_list1:
+                    temp_list2 = item_step1.split('+')
+                    for item_step2 in temp_list2:
+                        sku = re.findall('[0-9]{0, }:', item_step2)
+                        date = re.findall('-[0-9]{1,2}/[0-9]{1,2}', item_step2)
+                        qty = re.findall('[*][0-9]{0, }', item_step2)
+                        if len(sku) == 0:
+                            sku = temp_sku
+                        if len(qty) == 0:
+                            qty = temp_qty
+                        result = [sku, re.sub('-', '', ''.join(date)), qty]
+                        result_list.append(result)
+                        # if len(date) > 0:
+                        #     np.insert(result_list, 0, result, axis=0)
+                        print(result)
+                        # result = [str(re.sub(':', '', sku)), str(re.sub('-', '', date)), str(re.sub('[*]', '', qty))]
+                        # result_list.insert(len(result_list), result)
+            else:
+                print('有逗号没有加号的情况')
+                temp_list = temp_str.split(',')
+                for item in temp_list:
+                    # print(item)
+                    sku = re.findall('[0-9]{0, }:', item)
+                    date = re.findall('-[0-9]{1,2}/[0-9]{1,2}', item)
+
+                    qty = re.findall('[*][0-9]{0, }', item)
+                    if len(sku) == 0:
+                        sku = temp_sku
+                    if len(qty) == 0:
+                        qty = temp_qty
+                    result = [sku, re.sub('-', '', ''.join(date)), qty]
+                    result_list.append(result)
+                    # if len(date) > 0:
+                    #     np.insert(result_list, 0, result, axis=0)
+                    print(result)
+                    # result = [str(re.sub(':', '', sku)), str(re.sub('-', '', date)), str(re.sub('[*]', '', qty))]
+                    # result_list.insert(len(result_list), result)
+        elif len(re.findall('[+]', temp_str)) > 0:
+            print('没逗号有加号的情况')
+            temp_list = temp_str.split('+')
+            for item in temp_list:
+                # print(item)
+                sku = re.findall('[0-9]{0, }:', item)
+                date = re.findall('-[0-9]{1,2}/[0-9]{1,2}', item)
+
+                qty = re.findall('[*][0-9]{0, }', item)
+                if len(sku) == 0:
+                    sku = temp_sku
+                if len(qty) == 0:
+                    qty = temp_qty
+                result = [sku, re.sub('-', '', ''.join(date)), qty]
+                result_list.append(result)
+                # if len(date) > 0:
+                #     np.insert(result_list, 0, result, axis=0)
+                print(result)
+                # result = [str(re.sub(':', '', sku)), str(re.sub('-', '', date)), str(re.sub('[*]', '', qty))]
+                # result_list.insert(len(result_list), result)
+        else:
+            print('无逗号无加号情况')
+            date = re.findall('-[0-9]{1,2}/[0-9]{1,2}', temp_str)
+            date2 = re.sub('-', '', ''.join(date))
+            sku = re.findall('[0-9]{0, }:', temp_str)
+            if len(sku) > 0:
+                sku = re.sub(':', '', str(sku))
+            else:
+                sku = temp_sku
+            qty = re.findall('[*][0-9]{0, }.$', temp_str)
+            if len(qty) > 0:
+                qty = re.findall('[1-9][0-9]{0, }', str(qty))
+            else:
+                qty = temp_qty
+            result = [sku, date2, qty]
+            result_list.append(result)
+            # if len(date2) > 0:
+            #     np.insert(result_list, 0, result, axis=0)
+            print(result)
+            # result = [str(sku), str(date2), str(qty)]
+            # result_list.insert(len(result_list), result)
+    else:
+        print('无句点直接结束\n')
+
+print(result_list)
+# for i in range(len(result_list)):
+#     for j in range(3):
+#         print(result_list[i][j])
+
+workbook = xlwt.Workbook(r'D:\数据处理\2021年\3月\0324采购订单交货日期处理\result.xlsx')
+new_sheet = workbook.add_sheet('数据处理结果', cell_overwrite_ok=True)
+row_0 = ['sku', '到货时间', '数量']
+for i in range(len(row_0)):
+        new_sheet.write(0, i, row_0[i])
+for i in range(len(result_list)):
+        for j in range(3):
+            new_sheet.write(i + 1, j, result_list[i][j])
+workbook.save(r'D:\数据处理\2021年\3月\0324采购订单交货日期处理\result.xlsx')
