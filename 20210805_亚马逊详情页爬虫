@@ -1,0 +1,87 @@
+import datetime
+from tkinter.ttk import Combobox
+import requests
+import xlrd
+import xlutils.copy
+import time
+import threading
+import pandas as pd
+from pathlib import Path
+from lxml import etree
+from fake_useragent import UserAgent
+from concurrent.futures import ThreadPoolExecutor
+from tkinter import*
+from tkinter import scrolledtext
+from tkinter.filedialog import askdirectory
+from tkinter import messagebox
+from multiprocessing import freeze_support
+import re
+
+ua = UserAgent()
+# thread_state = False
+header = {
+    'User-Agent': ua.Chrome,
+    'Accept-Language': 'zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2',
+    'Connection': 'keep-alive'
+    }
+
+
+def get_page(url):
+    # proxies = {'http': 'http://' + get_proxy()}
+    i = 0
+    while i <= 3:
+        try:
+            response = requests.get(url, headers=header, timeout=10)
+            if response.status_code == 200:
+                # return response.content.decode('utf-8')
+                return response.text
+            else:
+                return None
+        except:
+            print('初始请求失败,第' + str(i+1) + '次请求')
+            i += 1
+
+
+def get_product_link(url, link_list):
+    text = get_page(url)
+    html = etree.HTML(text)
+    links = html.xpath('//div/div/ul/li[contains(@class, "s-item" )]//a[@class="s-item__link"]/@href')
+    for link in links:
+        link_list.append(link)
+
+if __name__ == '__main__':
+    url = 'https://www.amazon.com/dp/B08252GCSR/?language=en_US'
+    asins = {
+        'B08252GCSR',
+        'B0872X4H4J',
+        'B07R586J37',
+        'B07Y36FWTT',
+        'B07FBCTQ3L',
+        'B0872ZWV8X',
+        'B08JLNXLVZ',
+        'B08M5QS6S2'
+    }
+    for asin in asins:
+        url = 'https://www.amazon.com/dp/' + asin +'/?language=en_US'
+        text = get_page(url)
+        html = etree.HTML(text)
+        # print(text)
+        # print(ua.Chrome)
+        # print(text)
+        # product_id = html.xpath('//div[@id="descItemNumber"]/text()')
+        title = html.xpath('//span[@id="productTitle"]/text()')
+        print('标题： ' + ''.join(title).strip())
+        reviews = html.xpath('//table[@id="productDetails_detailBullets_sections1"]//span[@id="acrCustomerReviewText"]/text()')
+        print('评论数： ' + ''.join(reviews).split(' ',1)[0])
+        stars = html.xpath('//table[@id="productDetails_detailBullets_sections1"]/tr[2]/td/text()')
+        print('星级数： ' + ''.join(stars).strip().split(' ',1)[0])
+        rank1 = html.xpath('//*[@id="productDetails_detailBullets_sections1"]/tr[3]/td/span/span[1]/text()[1]')
+        print('大类排名： ' + ''.join(rank1).split(' ',1)[0].replace('#',''))
+        rank2 = html.xpath('//*[@id="productDetails_detailBullets_sections1"]/tr[3]/td/span/span[2]/text()')
+        print('小类排名： ' + ''.join(rank2).split(' ',1)[0].replace('#',''))
+        QnA = html.xpath('//*[@id="askATFLink"]/span/text()')
+        print('QA数： ' + ''.join(QnA).strip().split(' ',1)[0])
+        first_img = html.xpath('//span[@class="a-list-item"]/span[@class="a-declarative"]/div[@id="imgTagWrapperId"]/img/@src')
+        print('首图链接： ' + ''.join(first_img))
+        ourprice = html.xpath('//table[@class="a-lineitem"]/tr[@id="priceblock_ourprice_row"]/td[@class="a-span12"]/span[1]/text()')
+        print('价格： ' + ''.join(ourprice).strip())
