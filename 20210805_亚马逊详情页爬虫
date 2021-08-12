@@ -12,6 +12,7 @@ from fake_useragent import UserAgent
 from concurrent.futures import ThreadPoolExecutor
 from tkinter import*
 from tkinter import scrolledtext
+from tkinter import filedialog
 from tkinter.filedialog import askdirectory
 from tkinter import messagebox
 from multiprocessing import freeze_support
@@ -21,17 +22,28 @@ ua = UserAgent()
 # thread_state = False
 header = {
     'User-Agent': ua.Chrome,
-    'Accept-Language': 'zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2',
-    'Connection': 'keep-alive'
+    'authority': 'www.amazon.com',
+    'rtt': '400',
+    'downlink': '1.45',
+    'ect': '3g',
+    'sec-ch-ua': '"Chromium";v="92", " Not A;Brand";v="99", "Google Chrome";v="92"',
+    'sec-ch-ua-mobile': '?0',
+    'upgrade-insecure-requests': '1',
+    'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
+    'sec-fetch-site': 'same-origin',
+    'sec-fetch-mode': 'navigate',
+    'sec-fetch-user': '?1',
+    'sec-fetch-dest': 'document',
+    # 'referer': 'https://www.amazon.com/gp/bestsellers/?ref_=nav_cs_bestsellers_8a080d3d7b55497ea1bdd97b7cff8b7b',
+    'accept-language': 'zh,en-GB;q=0.9,en-US;q=0.8,en;q=0.7',
     }
-
 
 def get_page(url):
     # proxies = {'http': 'http://' + get_proxy()}
     i = 0
     while i <= 3:
         try:
-            response = requests.get(url, headers=header, timeout=10)
+            response = requests.get(url, headers=header, timeout=15)
             if response.status_code == 200:
                 # return response.content.decode('utf-8')
                 return response.text
@@ -41,47 +53,127 @@ def get_page(url):
             print('初始请求失败,第' + str(i+1) + '次请求')
             i += 1
 
-
-def get_product_link(url, link_list):
-    text = get_page(url)
-    html = etree.HTML(text)
-    links = html.xpath('//div/div/ul/li[contains(@class, "s-item" )]//a[@class="s-item__link"]/@href')
-    for link in links:
-        link_list.append(link)
-
-if __name__ == '__main__':
-    url = 'https://www.amazon.com/dp/B08252GCSR/?language=en_US'
-    asins = {
-        'B08252GCSR',
-        'B0872X4H4J',
-        'B07R586J37',
-        'B07Y36FWTT',
-        'B07FBCTQ3L',
-        'B0872ZWV8X',
-        'B08JLNXLVZ',
-        'B08M5QS6S2'
-    }
+def get_info(asins, info_dict):
+    temp_dict = {}
     for asin in asins:
         url = 'https://www.amazon.com/dp/' + asin +'/?language=en_US'
         text = get_page(url)
         html = etree.HTML(text)
-        # print(text)
-        # print(ua.Chrome)
-        # print(text)
-        # product_id = html.xpath('//div[@id="descItemNumber"]/text()')
+        test = html.xpath('//p[@class="a-last"]/text()')
+        # 判断是否进入反爬验证码页面，若是，则重新读取
+        while 'Sorry' in str(test):
+            text = get_page(url)
+            print(ua.Chrome)
+            html = etree.HTML(text)
+            test = html.xpath('//p[@class="a-last"]/text()')
+            time.sleep(0.5)
+
         title = html.xpath('//span[@id="productTitle"]/text()')
+        print(asin)
+        # 标题
         print('标题： ' + ''.join(title).strip())
-        reviews = html.xpath('//table[@id="productDetails_detailBullets_sections1"]//span[@id="acrCustomerReviewText"]/text()')
-        print('评论数： ' + ''.join(reviews).split(' ',1)[0])
-        stars = html.xpath('//table[@id="productDetails_detailBullets_sections1"]/tr[2]/td/text()')
+        # 评论数
+        reviews = html.xpath(
+            '//div[@id="averageCustomerReviews"]//a[@id="acrCustomerReviewLink"]/span[@id="acrCustomerReviewText"]/text()')
+        print('评论数： ' + ''.join(reviews).split(' ',1)[0].replace(',',''))
+        # 星级数
+        stars = html.xpath(
+            '//div[@id="averageCustomerReviews"]//span[@id="acrPopover"]/span/a/i/span/text()')
         print('星级数： ' + ''.join(stars).strip().split(' ',1)[0])
-        rank1 = html.xpath('//*[@id="productDetails_detailBullets_sections1"]/tr[3]/td/span/span[1]/text()[1]')
-        print('大类排名： ' + ''.join(rank1).split(' ',1)[0].replace('#',''))
-        rank2 = html.xpath('//*[@id="productDetails_detailBullets_sections1"]/tr[3]/td/span/span[2]/text()')
-        print('小类排名： ' + ''.join(rank2).split(' ',1)[0].replace('#',''))
+        # 取大类排名，大类类目，小类排名，小类类目
+        if 'a-section table-padding' in text:
+            # 排名1，样例：#3,238 in Home & Kitchen，以空格分割，取第一个元素并去除#和逗号
+            rank1 = html.xpath('//*[@id="productDetails_detailBullets_sections1"]/tr/td/span/span[1]/text()[1]')
+            print('排名1： ' + ''.join(rank1).split(' ',1)[0].replace('#','').replace(',',''))
+            # 类目1，样例：See Top 100 in Home & Kitchen，取单词in后面的字符串
+            cat_1 = html.xpath('//*[@id="productDetails_detailBullets_sections1"]/tr/td/span/span[1]/a/text()')
+            if 'in' in ''.join(cat_1):
+                print('类目1： ' + ''.join(cat_1).split('in ')[1])
+            else:
+                print('类目1： ' + ''.join(cat_1))
+            # 排名2，样例：#23
+            rank2 = html.xpath('//*[@id="productDetails_detailBullets_sections1"]/tr/td/span/span[2]/text()')
+            print('排名2： ' + ''.join(rank2).split(' ',1)[0].replace('#','').replace(',',''))
+            # 类目2，样例：Bed Throws
+            cat_2 = html.xpath('//*[@id="productDetails_detailBullets_sections1"]/tr/td/span/span[2]/a/text()')
+            print('类目2： ' + ''.join(cat_2))
+            first_available_date = html.xpath('//th[text()="Date First Available"]//text()')
+            print('上架日期： ' + ''.join(first_available_date))
+        else:
+            rank1 = html.xpath(
+                '//div[@id="detailBulletsWrapper_feature_div"]/ul[1]/li/span//text()[2]')
+            print('排名1： ' + ''.join(rank1).strip().split(' ',1)[0].replace('#','').replace(',',''))
+            cat_1 = html.xpath(
+                '//div[@id="detailBulletsWrapper_feature_div"]/ul[1]/li/span/a/text()')
+            if 'in' in ''.join(cat_1):
+                print('类目1: ' + ''.join(cat_1).split('in ')[1])
+            else:
+                print('类目1: ' + ''.join(cat_1))
+            rank2 = html.xpath(
+                '//div[@id="detailBulletsWrapper_feature_div"]/ul/li/span/ul/li/span/text()'
+            )
+            print('排名2： ' + ''.join(rank2).strip().split(' ',1)[0].replace('#','').replace(',',''))
+            cat_2 = html.xpath(
+                '//div[@id="detailBulletsWrapper_feature_div"]/ul/li/span/ul/li/span/a/text()')
+            print('类目2: ' + ''.join(cat_2))
+            first_available_date = html.xpath('//span[text()="Date First Available"]/following-sibling::span/text()')
+            print('上架日期： ' + ''.join(first_available_date))
+        # QA问答数
         QnA = html.xpath('//*[@id="askATFLink"]/span/text()')
         print('QA数： ' + ''.join(QnA).strip().split(' ',1)[0])
+        # 首图链接
         first_img = html.xpath('//span[@class="a-list-item"]/span[@class="a-declarative"]/div[@id="imgTagWrapperId"]/img/@src')
         print('首图链接： ' + ''.join(first_img))
-        ourprice = html.xpath('//table[@class="a-lineitem"]/tr[@id="priceblock_ourprice_row"]/td[@class="a-span12"]/span[1]/text()')
-        print('价格： ' + ''.join(ourprice).strip())
+        # 价格标签，区分ourprice和dealprice
+        price_tag = html.xpath('//table[@class="a-lineitem"]/tr/td[@class="a-span12"]/span[1]/@id')
+        price_type = ''
+        if 'ourprice' in ''.join(price_tag):
+            price_type = 'ourprice'
+        else:
+            price_type = 'dealprice'
+        print('价格类型： ' + price_type)
+        # 价格
+        price = html.xpath('//table[@class="a-lineitem"]/tr/td[@class="a-span12"]/span[1]/text()')
+        print('价格： ' + ''.join(price).strip())
+
+        # 完整类目
+        cats1 = html.xpath('//ul[@class="a-unordered-list a-horizontal a-size-small"]/li/span//text()')
+        # cats2 = [''.join(i) for i in cats1]
+        cats2 = []
+        for cat1 in cats1:
+            if len(cat1) > 0:
+                cats2.append(cat1.strip())
+                cats2.append(' ')
+        total_cat = ''.join(cats2)
+        print('完整类目： ' + total_cat)
+
+        # 所有评论链接
+        reviews_href = html.xpath('//a[@data-hook="see-all-reviews-link-foot"]/@href')
+        print('评论页面： ' + 'https://www.amazon.com' + ''.join(reviews_href))
+        # 评论页面首页差评数
+        text2 = get_page('https://www.amazon.com' + ''.join(reviews_href))
+        html2 = etree.HTML(text2)
+        critical_reviews = html2.xpath(
+            '//div[@id="cm_cr-review_list"]/div[@data-hook="review"]/div/div/div[@class="a-row"]/a/@title')
+        crs = 0
+        for cr in critical_reviews:
+            if float(''.join(cr).strip().split(' ',1)[0]) <= 3:
+                crs += 1
+        print('首页差评数： ' + str(crs))
+
+        time.sleep(0.5)
+
+if __name__ == '__main__':
+    root = Tk()
+    root.withdraw()
+    # 打开文件选择对话框
+    filepath = filedialog.askopenfilename()
+
+    asin_data = []
+    info_dict = {}
+    # 读取txt里的asin
+    with open(filepath.replace('/','\\'),'r') as f:
+        for line in f.readlines():
+            asin_data.append(line.strip('\n'))
+    # 启动爬虫
+    get_info(asin_data, info_dict)
