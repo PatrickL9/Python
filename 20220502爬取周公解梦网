@@ -1,0 +1,116 @@
+#!/usr/bin/python3
+import requests
+from lxml import etree
+import time
+import xlwt, xlrd
+from xlutils.copy import copy as xl_copy
+
+
+ipcount = 0
+save_path = r'D:\zhougongjiemeng\result.xls'
+header = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36',
+}
+
+
+# 读取页面
+def get_page(url):
+    i = 0
+    while i <= 3:
+        try:
+            response = requests.get(url, headers=header,  timeout=15)
+            if response.status_code == 200:
+                return response.text
+            else:
+                return None
+        except:
+            print('初始请求失败,第' + str(i+1) + '次请求')
+            i += 1
+
+
+# 爬取类目中所有文章链接
+def get_start(url, result_info):
+    text = get_page(url)
+    html = etree.HTML(text)
+    # print(text)
+    content_rows = html.xpath('//div[@id="list"]/ul/div')
+    for row in content_rows:
+        content_lists = row.xpath('.//li/a/@href')
+        content_name = row.xpath('.//li/a/text()')
+        for name, hrf in zip(content_name, content_lists):
+            print(name)
+            print('------------------------------')
+            content = get_content('https://www.zgjm.org' + hrf)
+            result_info.append([name, content])
+    pages_list = html.xpath('//div[@class="list-pages"]/ul/li/a/@href')
+    if len(pages_list) >= 3:
+        for i in range(len(pages_list)-2):
+            time.sleep(0.5)
+            print("开始翻页 " + str(i))
+            next_url = 'https://www.zgjm.org' + pages_list[i]
+            print(next_url)
+            get_next_page(next_url, result_info)
+
+
+# 爬取翻页的文章链接
+def get_next_page(url, result_info):
+    text = get_page(url)
+    html = etree.HTML(text)
+    content_rows = html.xpath('//div[@id="list"]/ul/div')
+    for row in content_rows:
+        content_lists = row.xpath('.//li/a/@href')
+        content_name = row.xpath('.//li/a/text()')
+        for name, hrf in zip(content_name, content_lists):
+            print(name)
+            print('------------------------------')
+            content = get_content('https://www.zgjm.org' + hrf)
+            result_info.append([name, content])
+
+
+# 爬取文章内容
+def get_content(url):
+    text = get_page(url)
+    html = etree.HTML(text)
+    content = html.xpath('//div[@id="entrybody"]/div[@class="read-content"]//text()')
+    print(content)
+    return content
+
+# 数据保存excel
+def save_info(page, result_info, save_path):
+    rb = xlrd.open_workbook(save_path)
+    wb = xl_copy(rb)
+    sheet1 = wb.add_sheet(page)
+    # 写入第一行表头
+    # row_0 = ['title', 'content']
+    # for i in range(len(row_0)):
+    #     sheet1.write(0, i, row_0[i])
+    for i in range(len(result_info)):
+        for j in range(2):
+            sheet1.write(i + 1, j, result_info[i][j])
+    wb.save(save_path)
+    print('数据保存成功！')
+
+
+if __name__ == '__main__':
+    url_lists = [
+        'https://www.zgjm.org/renwu/',
+        'https://www.zgjm.org/dongwu/',
+        'https://www.zgjm.org/zhiwu/',
+        'https://www.zgjm.org/wupin/',
+        'https://www.zgjm.org/huodong/',
+        'https://www.zgjm.org/shenghuo/',
+        'https://www.zgjm.org/ziran/',
+        'https://www.zgjm.org/guishen/',
+        'https://www.zgjm.org/jianzhu/',
+        'https://www.zgjm.org/qita/',
+        'https://www.zgjm.org/yunfujiemeng/'
+    ]
+    i = 0
+
+    for url in url_lists:
+        i += 1
+        print('开始第' + str(i) + '类目爬取')
+        result_info = []
+        get_start(url, result_info)
+        save_info('第'+str(i) + '页', result_info, save_path)
+        time.sleep(0.5)
